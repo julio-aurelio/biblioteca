@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Liberar Livro</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="container">
+    <h1>Liberar Livro: {{ livro.titulo }}</h1>
+    <p>Reservado por {{ livro.aluno }} ({{ livro.turma }})</p>
+    <form method="post">
+        <input type="submit" value="Confirmar Liberação">
+    </form>
+    <a class="btn" href="{{ url_for('index') }}">Voltar</a>
+</div>
+</body>
+</html>

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Livros Reservados</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+    <div class="container">
+        <h1>Livros Reservados</h1>
+        <nav>
+            <a href="{{ url_for('index') }}">Todos Livros</a>
+            <a href="{{ url_for('reservados') }}">Reservados</a>
+            <a href="{{ url_for('cadastrar') }}">Cadastrar</a>
+        </nav>
+
+        <form id="search-form" method="get" action="{{ url_for('buscar') }}"
+            style="position: relative; text-align:center; margin-top: 15px;">
+            <input type="text" name="q" id="search-input" placeholder="Buscar por título ou autor" autocomplete="off"
+                value="{{ termo|default('') }}">
+            <input type="submit" value="🔍">
+            <ul id="suggestions"
+                style="list-style:none; margin:0; padding:0; position:absolute; top:38px; left:0; width:300px; background:white; border:1px solid #00796b; display:none; max-height:150px; overflow-y:auto; z-index:1000;">
+            </ul>
+        </form>
+
+        {% if livros %}
+        <ul>
+            {% for livro in livros %}
+            <li>
+                <h3>{{ livro.titulo }}</h3>
+                <p>{{ livro.autor }} ({{ livro.ano }})</p>
+                <span class="reservado">Reservado por {{ livro.aluno }} ({{ livro.turma }})</span>
+                <br>
+                <a class="btn" href="{{ url_for('liberar', id=loop.index0) }}">Liberar</a>
+                <a class="btn" href="{{ url_for('atualizar', id=loop.index0) }}">Atualizar</a>
+                <a class="btn" href="{{ url_for('excluir', id=loop.index0) }}">Excluir</a>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p>Nenhum livro está reservado no momento.</p>
+        {% endif %}
+    </div>
+
+    <script>
+        const input = document.getElementById('search-input');
+        const suggestions = document.getElementById('suggestions');
+
+        input.addEventListener('input', async () => {
+            const query = input.value.trim();
+            if (!query) {
+                suggestions.style.display = 'none';
+                return;
+            }
+
+            const response = await fetch(`/autocomplete?q=${encodeURIComponent(query)}`);
+            const data = await response.json();
+
+            suggestions.innerHTML = '';
+            if (data.length > 0) {
+                data.forEach(item => {
+                    const li = document.createElement('li');
+                    li.textContent = item;
+                    li.style.padding = '8px';
+                    li.style.cursor = 'pointer';
+                    li.addEventListener('click', () => {
+                        input.value = item;
+                        suggestions.style.display = 'none';
+                    });
+                    suggestions.appendChild(li);
+                });
+                suggestions.style.display = 'block';
+            } else {
+                suggestions.style.display = 'none';
+            }
+        });
+
+        // Fecha sugestões se clicar fora
+        document.addEventListener('click', (e) => {
+            if (!input.contains(e.target) && !suggestions.contains(e.target)) {
+                suggestions.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+
+</html>

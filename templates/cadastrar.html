@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cadastrar Livro</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div id="flash-container">
+      {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
+<div class="container">
+    <h1>Cadastrar Livro</h1>
+    <form method="post">
+        <input type="text" name="titulo" placeholder="Título" required>
+        <input type="text" name="autor" placeholder="Autor" required>
+        <input type="text" name="ano" placeholder="Ano de publicação" required>
+        <input type="submit" value="Cadastrar">
+    </form>
+    <a class="btn" href="{{ url_for('index') }}">Voltar</a>
+</div>
+
+<script>
+  setTimeout(() => {
+    const flash = document.querySelectorAll('.flash');
+    flash.forEach(f => {
+      f.style.transition = 'all 0.5s';
+      f.style.opacity = '0';
+      f.style.transform = 'translateY(-20px)';
+    });
+  }, 3000);
+</script>
+</body>
+</html>

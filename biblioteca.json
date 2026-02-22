@@ -1,0 +1,18 @@
+[
+    {
+        "titulo": "Harry Potter",
+        "autor": "J.K. Rowling",
+        "ano": 1997,
+        "disponivel": true,
+        "aluno": null,
+        "turma": null
+    },
+    {
+        "titulo": "O Senhor dos Anéis",
+        "autor": "J.R.R. Tolkien",
+        "ano": "1954",
+        "disponivel": true,
+        "aluno": null,
+        "turma": null
+    }
+]

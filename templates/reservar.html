@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Reservar Livro</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="container">
+    <h1>Reservar Livro: {{ livro.titulo }}</h1>
+    <p>Autor: {{ livro.autor }} ({{ livro.ano }})</p>
+
+    {% if not livro.disponivel %}
+        <p class="reservado">❌ Livro já reservado por {{ livro.aluno }} ({{ livro.turma }})</p>
+        <a class="btn" href="{{ url_for('index') }}">Voltar</a>
+    {% else %}
+        <form method="post">
+            <input type="text" name="aluno" placeholder="Nome do Aluno" required>
+            <label for="turma">Selecione a Turma:</label>
+            <select name="turma" id="turma" required>
+                {% for i in range(1, turmas|length + 1) %}
+                    <option value="{{ i }}">{{ turmas[i-1] }}</option>
+                {% endfor %}
+            </select>
+            <input type="submit" value="Reservar">
+        </form>
+        <a class="btn" href="{{ url_for('index') }}">Cancelar</a>
+    {% endif %}
+</div>
+</body>
+</html>
