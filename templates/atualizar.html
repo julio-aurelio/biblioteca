@@ -7,12 +7,16 @@
 <body>
 <div class="container">
     <h1>Atualizar Livro</h1>
+
     <form method="post">
         <input type="text" name="titulo" value="{{ livro.titulo }}" required>
         <input type="text" name="autor" value="{{ livro.autor }}" required>
-        <input type="text" name="ano" value="{{ livro.ano }}" required>
+        <input type="number" name="ano" value="{{ livro.ano }}" required>
+        <input type="number" name="total_copias" value="{{ livro.total_copias }}" min="1" required>
+
         <input type="submit" value="Atualizar">
     </form>
+
     <a class="btn" href="{{ url_for('index') }}">Voltar</a>
 </div>
 </body>

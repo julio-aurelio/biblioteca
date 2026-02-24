@@ -228,7 +228,7 @@ form {
     margin: auto;
 }
 
-input[type="text"],
+input[type="number"],
 select {
     font-size: 18px;
     padding: 12px;
@@ -237,6 +237,14 @@ select {
     width: 100%;
 }
 
+input[type="text"],
+select {
+    font-size: 18px;
+    padding: 12px;
+    border: 2px solid #00796b;
+    border-radius: 12px;
+    width: 100%;
+}
 input[type="submit"] {
     background: #00796b;
     color: white;
@@ -286,3 +294,5 @@ input[type="submit"]:hover {
     0% { opacity: 0; transform: translateY(-20px); }
     100% { opacity: 1; transform: translateY(0); }
 }
+
+    
