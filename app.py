@@ -6,43 +6,40 @@ app = Flask(__name__)
 app.secret_key = "sua_chave_secreta"
 
 SUPABASE_URL = "https://wgmuhgcxqfyidmuftqxb.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndnbXVoZ2N4cWZ5aWRtdWZ0cXhiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE5NDY1NjYsImV4cCI6MjA4NzUyMjU2Nn0.CUO3ZofxgNy1Q932Q0-poGab8JdVc1Nh-DUSLvz0RNM" 
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndnbXVoZ2N4cWZ5aWRtdWZ0cXhiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE5NDY1NjYsImV4cCI6MjA4NzUyMjU2Nn0.CUO3ZofxgNy1Q932Q0-poGab8JdVc1Nh-DUSLvz0RNM"
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ----------------------------
-# FUNÇÃO AUXILIAR
+# FUNÇÃO AUXILIAR ULTRA OTIMIZADA
 # ----------------------------
-def calcular_disponibilidade(livro_id, total_copias):
-    emprestimos = supabase.table("emprestimos")\
-        .select("id")\
-        .eq("livro_id", livro_id)\
-        .execute().data
-    return total_copias - len(emprestimos)
+def get_livros_com_disponiveis():
+    # pega todos livros e quantidade de empréstimos em 1 consulta usando join
+    query = supabase.table("livros").select("*, emprestimos(id)").execute()
+    livros = query.data
+
+    for livro in livros:
+        emprestimos_count = len(livro.get("emprestimos", []))
+        livro["disponiveis"] = livro["total_copias"] - emprestimos_count
+
+    return livros
 
 # ----------------------------
-# FUNÇÃO PARA TOTAIS
+# FUNÇÃO PARA TOTAIS ULTRA OTIMIZADA
 # ----------------------------
-def calcular_totais():
-    livros = supabase.table("livros").select("*").execute().data
+def get_totais():
+    livros = supabase.table("livros").select("id,total_copias,emprestimos(id)").execute().data
     total_copias = sum(l["total_copias"] for l in livros)
-
-    emprestimos = supabase.table("emprestimos").select("*").execute().data
-    total_emprestados = len(emprestimos)  # cada registro de empréstimo = 1 livro emprestado
-
-    reservas = supabase.table("reservas").select("*").execute().data
-    total_reservados = len(reservas)  # cada registro de reserva = 1 livro reservado
-
+    total_emprestados = sum(len(l.get("emprestimos", [])) for l in livros)
+    total_reservados = supabase.table("reservas").select("id").execute().count
     return total_copias, total_emprestados, total_reservados
 
-
+# ----------------------------
+# ROTA PRINCIPAL
+# ----------------------------
 @app.route("/")
 def index():
-    livros = supabase.table("livros").select("*").order("id").execute().data
-    for livro in livros:
-        livro["disponiveis"] = calcular_disponibilidade(livro["id"], livro["total_copias"])
-
-    total_copias, total_emprestados, total_reservados = calcular_totais()
-
+    livros = get_livros_com_disponiveis()
+    total_copias, total_emprestados, total_reservados = get_totais()
     return render_template(
         "index.html",
         livros=livros,
@@ -95,7 +92,9 @@ def reservar(livro_id):
         turma_index = int(request.form["turma"]) - 1
         turma = turmas[turma_index]
 
-        disponiveis = calcular_disponibilidade(livro_id, livro["total_copias"])
+        # Disponibilidade com contagem de empréstimos no banco
+        emprestimos_count = supabase.table("emprestimos").select("id").eq("livro_id", livro_id).execute().count
+        disponiveis = livro["total_copias"] - emprestimos_count
 
         if disponiveis > 0:
             supabase.table("emprestimos").insert({
@@ -130,6 +129,7 @@ def liberar(emprestimo_id):
     livro_id = emprestimo["livro_id"]
     supabase.table("emprestimos").delete().eq("id", emprestimo_id).execute()
 
+    # Transferir reserva para empréstimo
     reservas = supabase.table("reservas").select("*").eq("livro_id", livro_id).order("data_reserva").limit(1).execute().data
     if reservas:
         primeira = reservas[0]
@@ -181,14 +181,14 @@ def atualizar(livro_id):
 def buscar():
     termo = request.args.get("q", "")
 
-    livros = supabase.table("livros").select("*")\
-        .or_(f"titulo.ilike.%{termo}%,autor.ilike.%{termo}%")\
-        .execute().data
+    livros = supabase.table("livros").select("*, emprestimos(id)")\
+        .or_(f"titulo.ilike.%{termo}%,autor.ilike.%{termo}%").execute().data
 
     for livro in livros:
-        livro["disponiveis"] = calcular_disponibilidade(livro["id"], livro["total_copias"])
+        livro["disponiveis"] = livro["total_copias"] - len(livro.get("emprestimos", []))
 
-    total_livros, total_reservas = calcular_totais()
+    total_livros = sum(l["total_copias"] for l in livros)
+    total_reservas = supabase.table("reservas").select("id").execute().count
 
     return render_template(
         "index.html",
@@ -213,16 +213,10 @@ def autocomplete():
 # ----------------------------
 @app.route("/reservados")
 def reservados():
-    # Pega todos os livros
-    livros = supabase.table("livros").select("*").execute().data
-
-    # Calcula total de livros (somando todas as cópias)
+    livros = supabase.table("livros").select("id,total_copias").execute().data
     total_livros = sum(l["total_copias"] for l in livros)
 
-    # Pega todos os emprestimos
     emprestimos = supabase.table("emprestimos").select("*, livros(*)").execute().data
-
-    # Total de livros emprestados
     total_emprestados = len(emprestimos)
 
     return render_template(
@@ -234,9 +228,9 @@ def reservados():
 
 @app.route("/reservas")
 def reservas():
-    reservas = supabase.table("reservas").select("*, livros(*)").order("data_reserva").execute().data
-    total_reservas = len(reservas)
-    return render_template("reservas.html", reservas=reservas, total_reservas=total_reservas)
+    reservas_list = supabase.table("reservas").select("*, livros(*)").order("data_reserva").execute().data
+    total_reservas = len(reservas_list)
+    return render_template("reservas.html", reservas=reservas_list, total_reservas=total_reservas)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run()
