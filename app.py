@@ -54,14 +54,26 @@ def index():
 @app.route("/cadastrar", methods=["GET", "POST"])
 def cadastrar():
     if request.method == "POST":
-        titulo = request.form["titulo"]
-        autor = request.form["autor"]
+        titulo = request.form["titulo"].strip()
+        autor = request.form["autor"].strip()
         ano = int(request.form["ano"])
         total = int(request.form["total_copias"])
 
         if total < 1:
             flash("O livro precisa ter pelo menos 1 cópia.", "erro")
             return redirect(url_for("cadastrar"))
+
+        # Verifica se já existe
+        existente = supabase.table("livros")\
+            .select("id")\
+            .eq("titulo", titulo)\
+            .eq("autor", autor)\
+            .eq("ano", ano)\
+            .execute().data
+
+        if existente:
+            flash("Este livro já está cadastrado no sistema.", "erro")
+            return redirect(url_for("index"))
 
         supabase.table("livros").insert({
             "titulo": titulo,
@@ -75,36 +87,39 @@ def cadastrar():
 
     return render_template("cadastrar.html")
 
-# ----------------------------
-# RESERVAR / EMPRESTAR
-# ----------------------------
 @app.route("/reservar/<int:livro_id>", methods=["GET", "POST"])
 def reservar(livro_id):
-    turmas = ["6ºA","6ºB","6ºC","6ºD","6ºE","7ºA","7ºB","7ºC","7ºD",
-              "8ºA","8ºB","8ºC","9ºA","9ºB","9ºC","9ºD"]
+    turmas = [
+        "6ºA","6ºB","6ºC","6ºD","6ºE",
+        "7ºA","7ºB","7ºC","7ºD",
+        "8ºA","8ºB","8ºC",
+        "9ºA","9ºB","9ºC","9ºD"
+    ]
 
+    # Pega o livro do banco
     livro = supabase.table("livros").select("*").eq("id", livro_id).single().execute().data
     if not livro:
-        return "Livro não encontrado", 404
+        flash("Livro não encontrado.", "erro")
+        return redirect(url_for("index"))
+
+    # Conta empréstimos atuais (pode vir None se a consulta falhar)
+    emprestimos_count = supabase.table("emprestimos")\
+        .select("id").eq("livro_id", livro_id).execute().count
+    if emprestimos_count is None:
+        emprestimos_count = 0
+
+    # Garantir que total_copias não seja None
+    livro_total = livro.get("total_copias") or 0
+    livro["disponiveis"] = livro_total - emprestimos_count
 
     if request.method == "POST":
-        aluno = request.form["aluno"]
-        turma_index = int(request.form["turma"]) - 1
+        aluno = request.form["aluno"].strip()
+        turma_index = int(request.form.get("turma", 1)) - 1
+        turma_index = max(0, min(turma_index, len(turmas) - 1))
         turma = turmas[turma_index]
 
-        # Disponibilidade com contagem de empréstimos no banco
-        emprestimos_count = supabase.table("emprestimos").select("id").eq("livro_id", livro_id).execute().count
-        disponiveis = livro["total_copias"] - emprestimos_count
-
-        if disponiveis > 0:
-            supabase.table("emprestimos").insert({
-                "livro_id": livro_id,
-                "aluno": aluno,
-                "turma": turma,
-                "data_emprestimo": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            }).execute()
-            flash(f"Livro '{livro['titulo']}' emprestado com sucesso!", "sucesso")
-        else:
+        if livro["disponiveis"] <= 0:
+            # Reserva
             supabase.table("reservas").insert({
                 "livro_id": livro_id,
                 "aluno": aluno,
@@ -112,9 +127,19 @@ def reservar(livro_id):
                 "data_reserva": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }).execute()
             flash(f"Não há cópias disponíveis. '{livro['titulo']}' foi reservado!", "erro")
+        else:
+            # Empresta
+            supabase.table("emprestimos").insert({
+                "livro_id": livro_id,
+                "aluno": aluno,
+                "turma": turma,
+                "data_emprestimo": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }).execute()
+            flash(f"Livro '{livro['titulo']}' emprestado com sucesso!", "sucesso")
 
         return redirect(url_for("index"))
 
+    # GET: mostra a página de reserva
     return render_template("reservar.html", livro=livro, turmas=turmas)
 
 # ----------------------------
@@ -174,28 +199,40 @@ def atualizar(livro_id):
 
     return render_template("atualizar.html", livro=livro)
 
-# ----------------------------
-# BUSCAR / AUTOCOMPLETE
-# ----------------------------
 @app.route("/buscar")
 def buscar():
-    termo = request.args.get("q", "")
+    termo = request.args.get("q", "").strip()
 
+    # Busca livros filtrando título ou autor (ilike)
     livros = supabase.table("livros").select("*, emprestimos(id)")\
-        .or_(f"titulo.ilike.%{termo}%,autor.ilike.%{termo}%").execute().data
+        .filter("titulo", "ilike", f"%{termo}%")\
+        .execute().data
 
+    # Também busca por autor e adiciona se não estiver duplicado
+    livros_autor = supabase.table("livros").select("*, emprestimos(id)")\
+        .filter("autor", "ilike", f"%{termo}%")\
+        .execute().data
+
+    # Evita duplicados
+    ids_existentes = {livro["id"] for livro in livros}
+    for l in livros_autor:
+        if l["id"] not in ids_existentes:
+            livros.append(l)
+
+    # Calcula disponíveis
     for livro in livros:
         livro["disponiveis"] = livro["total_copias"] - len(livro.get("emprestimos", []))
 
-    total_livros = sum(l["total_copias"] for l in livros)
-    total_reservas = supabase.table("reservas").select("id").execute().count
+    # Totais para o template
+    total_copias = sum(l["total_copias"] for l in livros)
+    total_emprestados = sum(len(l.get("emprestimos", [])) for l in livros)
 
     return render_template(
         "index.html",
         livros=livros,
         termo=termo,
-        total_livros=total_livros,
-        total_reservas=total_reservas
+        total_copias=total_copias,
+        total_emprestados=total_emprestados
     )
 
 @app.route("/autocomplete")
